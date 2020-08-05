@@ -68,6 +68,7 @@ class Parser(object):
 
         elapsed = timedelta()
         best_e, best_metric = 1, Metric()
+        best_mean_as = -float("inf")  # mean of UAS and LAS
 
         for epoch in range(1, args.epochs + 1):
             start = datetime.now()
@@ -75,14 +76,16 @@ class Parser(object):
             logger.info(f"Epoch {epoch} / {args.epochs}:")
             self._train(train.loader)
             loss, dev_metric = self._evaluate(dev.loader)
+            curr_mean_as = 0.5 * (dev_metric.uas + dev_metric.las)
+
             logger.info(f"{'dev:':6} - loss: {loss:.4f} - {dev_metric}")
             loss, test_metric = self._evaluate(test.loader)
             logger.info(f"{'test:':6} - loss: {loss:.4f} - {test_metric}")
 
             t = datetime.now() - start
             # save the model if it is the best so far
-            if dev_metric > best_metric:
-                best_e, best_metric = epoch, dev_metric
+            if curr_mean_as > best_mean_as:
+                best_e, best_mean_as, best_metric = epoch, curr_mean_as, dev_metric
                 if is_master():
                     self.save(args.path)
                 logger.info(f"{t}s elapsed (saved)\n")

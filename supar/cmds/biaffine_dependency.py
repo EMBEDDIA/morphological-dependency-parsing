@@ -39,6 +39,8 @@ def main():
                            help='dimension of embeddings')
     subparser.add_argument('--bert', default='bert-base-cased',
                            help='which bert model to use')
+    subparser.add_argument('--patience', type=int, default=5,
+                           help='Early stopping tolerance (optimizing mean of UAS and LAS)')
     # evaluate
     subparser = subparsers.add_parser('evaluate', help='Evaluate the specified parser and dataset.')
     subparser.add_argument('--punct', action='store_true',
