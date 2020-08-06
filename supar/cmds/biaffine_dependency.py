@@ -17,6 +17,12 @@ def main():
     subparser = subparsers.add_parser('train', help='Train a parser.')
     subparser.add_argument('--feat', '-f', default='char', choices=['tag', 'char', 'bert'],
                            help='choices of additional features')
+    subparser.add_argument('--include_char', action='store_true',
+                           help='Include character embeddings as features')
+    subparser.add_argument('--include_bert', action='store_true',
+                           help='Include BERT embeddings as features')
+    subparser.add_argument('--include_upos', action='store_true',
+                           help='Include UPOS embeddings as features')
     subparser.add_argument('--build', '-b', action='store_true',
                            help='whether to build the model first')
     subparser.add_argument('--punct', action='store_true',

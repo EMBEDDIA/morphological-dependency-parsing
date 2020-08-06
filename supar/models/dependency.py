@@ -71,17 +71,22 @@ class BiaffineDependencyModel(nn.Module):
         unk_index (int):
             The index of the unknown token in the word vocabulary. Default: 1.
     """
-
-    def __init__(self,
-                 n_words,
-                 n_feats,
+    # NOTE: This initialization function is modified, so models other than biaffine might be broken because of this
+    def __init__(self, n_words,  # TODO: n_char_feats, n_bert_feats, n_upos_feats
+                 n_char_feats,
+                 n_bert_feats,
+                 n_upos_feats,
                  n_rels,
-                 feat='char',
+                 n_feats=-1,
+                 feat='char',  # TODO: `feats` instead of `feat`? and dict[str,int]
+                 feats=None,
                  n_embed=100,
-                 n_feat_embed=100,
+                 n_feat_embed=100,  # TODO: n_upos_embed
+                 n_bert_embed=0,  # Note: 0 means the pretrained hidden size is used
+                 n_upos_embed=50,
                  n_char_embed=50,
                  bert=None,
-                 n_bert_layers=4,
+                 n_bert_layers=4,  # TODO: make sure to set this to use all layers (= 0)
                  mix_dropout=.0,
                  embed_dropout=.33,
                  n_lstm_hidden=400,
@@ -90,37 +95,52 @@ class BiaffineDependencyModel(nn.Module):
                  n_mlp_arc=500,
                  n_mlp_rel=100,
                  mlp_dropout=.33,
-                 feat_pad_index=0,
+                 feat_pad_index=0,  # TODO: char_pad_index, bert_pad_index, upos_pad_index
+                 char_pad_index=0,
+                 bert_pad_index=0,
+                 upos_pad_index=0,
                  pad_index=0,
                  unk_index=1,
                  **kwargs):
         super().__init__()
 
         self.args = Config().update(locals())
+
+        if self.args.feats is None:
+            self.args.feats = {}
+
         # the embedding layer
         self.word_embed = nn.Embedding(num_embeddings=n_words,
                                        embedding_dim=n_embed)
-        if feat == 'char':
-            self.feat_embed = CharLSTM(n_chars=n_feats,
+
+        additional_features_size = 0
+        if 'char' in self.args.feats:
+            self.char_embed = CharLSTM(n_chars=n_char_feats,
                                        n_embed=n_char_embed,
-                                       n_out=n_feat_embed,
-                                       pad_index=feat_pad_index)
-        elif feat == 'bert':
-            self.feat_embed = BertEmbedding(model=bert,
+                                       n_out=n_char_embed,
+                                       pad_index=char_pad_index)
+            additional_features_size += n_char_embed
+
+        if 'bert' in self.args.feats:
+            self.bert_embed = BertEmbedding(model=bert,
                                             n_layers=n_bert_layers,
-                                            n_out=n_feat_embed,
-                                            pad_index=feat_pad_index,
-                                            dropout=mix_dropout)
-            self.n_feat_embed = self.feat_embed.n_out
-        elif feat == 'tag':
-            self.feat_embed = nn.Embedding(num_embeddings=n_feats,
-                                           embedding_dim=n_feat_embed)
-        else:
-            raise RuntimeError("The feat type should be in ['char', 'bert', 'tag'].")
+                                            n_out=n_bert_embed,
+                                            pad_index=bert_pad_index,
+                                            dropout=mix_dropout,
+                                            requires_grad=True)
+            # Get the actual embedding size after loading BERT
+            self.n_bert_embed = self.feat_embed.n_out
+            additional_features_size += self.n_bert_embed
+
+        if 'upostag' in self.args.feats:
+            self.upos_embed = nn.Embedding(num_embeddings=n_feats,
+                                           embedding_dim=n_upos_embed)
+            additional_features_size += n_upos_embed
+
         self.embed_dropout = IndependentDropout(p=embed_dropout)
 
         # the lstm layer
-        self.lstm = BiLSTM(input_size=n_embed+n_feat_embed,
+        self.lstm = BiLSTM(input_size=n_embed+additional_features_size,
                            hidden_size=n_lstm_hidden,
                            num_layers=n_lstm_layers,
                            dropout=lstm_dropout)
@@ -158,15 +178,17 @@ class BiaffineDependencyModel(nn.Module):
             nn.init.zeros_(self.word_embed.weight)
         return self
 
-    def forward(self, words, feats):
+    def forward(self, words, char_feats=None, bert_feats=None, upos_feats=None):
         """
         Args:
             words (torch.LongTensor) [batch_size, seq_len]:
                 The word indices.
-            feats (torch.LongTensor):
-                The feat indices.
-                If feat is 'char' or 'bert', the size of feats should be [batch_size, seq_len, fix_len]
-                If 'tag', then the size is [batch_size, seq_len].
+            char_feats (torch.LongTensor) [batch_size, seq_len, fix_len]:
+                Character indices to be embedded.
+            bert_feats (torch.LongTensor) [batch_size, seq_len, fix_len]:
+                Subword indices to be embedded.
+            upos_feats (torch.LongTensor) [batch_size, seq_len]:
+                Universal POS tag indices to be embedded.
 
         Returns:
             s_arc (torch.Tensor): [batch_size, seq_len, seq_len]
@@ -188,10 +210,21 @@ class BiaffineDependencyModel(nn.Module):
         word_embed = self.word_embed(ext_words)
         if hasattr(self, 'pretrained'):
             word_embed += self.pretrained(words)
-        feat_embed = self.feat_embed(feats)
-        word_embed, feat_embed = self.embed_dropout(word_embed, feat_embed)
+
+        additional_features = []
+        if char_feats is not None:
+            additional_features.append(self.embed_dropout(self.char_embed(char_feats)))
+        if bert_feats is not None:
+            additional_features.append(self.embed_dropout(self.bert_embed(bert_feats)))
+        if upos_feats is not None:
+            additional_features.append(self.embed_dropout(self.upos_embed(upos_feats)))
+
+        word_embed = self.embed_dropout(word_embed)
         # concatenate the word and feat representations
-        embed = torch.cat((word_embed, feat_embed), -1)
+        if len(additional_features) > 0:
+            embed = torch.cat((*word_embed, *additional_features), dim=-1)
+        else:
+            embed = torch.cat((*word_embed,), dim=-1)
 
         x = pack_padded_sequence(embed, mask.sum(1), True, False)
         x, _ = self.lstm(x)

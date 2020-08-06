@@ -33,10 +33,9 @@ class BiaffineDependencyParser(Parser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if self.args.feat in ('char', 'bert'):
-            self.WORD, self.FEAT = self.transform.FORM
-        else:
-            self.WORD, self.FEAT = self.transform.FORM, self.transform.CPOS
+        self.WORD, self.CHAR_FEAT, self.BERT_FEAT = self.transform.FORM  # type: Field
+        self.UPOS_FEAT = self.transform.CPOS  # type: Field
+
         self.ARC, self.REL = self.transform.HEAD, self.transform.DEPREL
         self.puncts = torch.tensor([i
                                     for s, i in self.WORD.vocab.stoi.items()
@@ -127,13 +126,31 @@ class BiaffineDependencyParser(Parser):
 
         bar, metric = progress_bar(loader), AttachmentMetric()
 
-        for words, feats, arcs, rels in bar:
+        # words[, char_feats, bert_feats, upos_feats], arcs, rels
+        for data in bar:
+            words, arcs, rels = data[0], data[-2], data[-1]
+            char_feats, bert_feats, upos_feats = None, None, None  # TODO: validate this
+            n_optional = len(data) - 3  # number of optional features present
+            if n_optional > 0:
+                popped_features = 0
+                if self.CHAR_FEAT is not None:
+                    char_feats = data[1 + popped_features]
+                    popped_features += 1
+
+                if self.BERT_FEAT is not None:
+                    bert_feats = data[1 + popped_features]
+                    popped_features += 1
+
+                if self.UPOS_FEAT is not None:
+                    upos_feats = data[1 + popped_features]
+                    popped_features += 1
+
             self.optimizer.zero_grad()
 
             mask = words.ne(self.WORD.pad_index)
             # ignore the first token of each sentence
             mask[:, 0] = 0
-            s_arc, s_rel = self.model(words, feats)
+            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             loss.backward()
             nn.utils.clip_grad_norm_(self.model.parameters(), self.args.clip)
@@ -153,11 +170,28 @@ class BiaffineDependencyParser(Parser):
 
         total_loss, metric = 0, AttachmentMetric()
 
-        for words, feats, arcs, rels in loader:
+        for data in loader:
+            words, arcs, rels = data[0], data[-2], data[-1]
+            char_feats, bert_feats, upos_feats = None, None, None  # TODO: validate this
+            n_optional = len(data) - 3  # number of optional features present
+            if n_optional > 0:
+                popped_features = 0
+                if self.CHAR_FEAT is not None:
+                    char_feats = data[1 + popped_features]
+                    popped_features += 1
+
+                if self.BERT_FEAT is not None:
+                    bert_feats = data[1 + popped_features]
+                    popped_features += 1
+
+                if self.UPOS_FEAT is not None:
+                    upos_feats = data[1 + popped_features]
+                    popped_features += 1
+
             mask = words.ne(self.WORD.pad_index)
             # ignore the first token of each sentence
             mask[:, 0] = 0
-            s_arc, s_rel = self.model(words, feats)
+            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask,
                                                      self.args.tree,
@@ -223,47 +257,72 @@ class BiaffineDependencyParser(Parser):
         args = Config(**locals())
         args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         os.makedirs(os.path.dirname(path), exist_ok=True)
+        # Load pretrained parser if it exists
         if os.path.exists(path) and not args.build:
-            parser = cls.load(**args)
+            parser = cls.load(**args)  # TODO: make sure the loading is fixed as well
             parser.model = cls.MODEL(**parser.args)
             parser.model.load_pretrained(parser.WORD.embed).to(args.device)
             return parser
 
         logger.info("Build the fields")
+        form_fields = []  # different ways to represent 'form' tokens, contains a Field or None
+        cpos_field = None
+
         WORD = Field('words', pad=pad, unk=unk, bos=bos, lower=True)
-        if args.feat == 'char':
-            FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos, fix_len=args.fix_len)
-        elif args.feat == 'bert':
+        form_fields.append(WORD)
+
+        CHAR_FEAT, BERT_FEAT, UPOS_FEAT = None, None, None
+        if args.feat == 'char' or args.include_char:
+            CHAR_FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos, fix_len=args.fix_len)
+        form_fields.append(CHAR_FEAT)
+
+        if args.feat == 'bert' or args.include_bert:
             from transformers import AutoTokenizer
             tokenizer = AutoTokenizer.from_pretrained(args.bert)
-            FEAT = SubwordField('bert',
-                                pad=tokenizer.pad_token,
-                                unk=tokenizer.unk_token,
-                                bos=tokenizer.bos_token or tokenizer.cls_token,
-                                fix_len=args.fix_len,
-                                tokenize=tokenizer.tokenize)
-            FEAT.vocab = tokenizer.get_vocab()
-        else:
-            FEAT = Field('tags', bos=bos)
+            BERT_FEAT = SubwordField('bert',
+                                     pad=tokenizer.pad_token,
+                                     unk=tokenizer.unk_token,
+                                     bos=tokenizer.bos_token or tokenizer.cls_token,
+                                     fix_len=args.fix_len,
+                                     tokenize=tokenizer.tokenize)
+            BERT_FEAT.vocab = tokenizer.get_vocab()
+        form_fields.append(BERT_FEAT)
+
+        if args.feat == 'tag' or args.include_upos:
+            logger.info("Using added UPOS tags")
+            UPOS_FEAT = Field('tags', bos=bos)
+        cpos_field = UPOS_FEAT
+
         ARC = Field('arcs', bos=bos, use_vocab=False, fn=CoNLL.get_arcs)
         REL = Field('rels', bos=bos)
-        if args.feat in ('char', 'bert'):
-            transform = CoNLL(FORM=(WORD, FEAT), HEAD=ARC, DEPREL=REL)
-        else:
-            transform = CoNLL(FORM=WORD, CPOS=FEAT, HEAD=ARC, DEPREL=REL)
+
+        transform = CoNLL(FORM=form_fields, CPOS=cpos_field, HEAD=ARC, DEPREL=REL)
 
         train = Dataset(transform, args.train)
         WORD.build(train, args.min_freq, (Embedding.load(args.embed, args.unk) if args.embed else None))
-        FEAT.build(train)
+        if CHAR_FEAT is not None:
+            CHAR_FEAT.build(train)
+        if BERT_FEAT is not None:
+            BERT_FEAT.build(train)
+        if UPOS_FEAT is not None:
+            UPOS_FEAT.build(train)
+
         REL.build(train)
         args.update({
             'n_words': WORD.vocab.n_init,
-            'n_feats': len(FEAT.vocab),
+            # 'n_feats': len(FEAT.vocab) if FEAT is not None else 0,
+            'n_char_feats': len(CHAR_FEAT.vocab) if CHAR_FEAT is not None else 0,
+            'n_bert_feats': len(BERT_FEAT.vocab) if BERT_FEAT is not None else 0,
+            'n_upos_feats': len(UPOS_FEAT.vocab) if UPOS_FEAT is not None else 0,
+            # TODO: 'feats': {}  # map feature names to embedding sizes
             'n_rels': len(REL.vocab),
             'pad_index': WORD.pad_index,
             'unk_index': WORD.unk_index,
             'bos_index': WORD.bos_index,
-            'feat_pad_index': FEAT.pad_index
+            # 'feat_pad_index': FEAT.pad_index if FEAT is not None else None,
+            'char_pad_index': CHAR_FEAT.pad_index if CHAR_FEAT is not None else None,
+            'bert_pad_index': BERT_FEAT.pad_index if BERT_FEAT is not None else None,
+            'upos_pad_index': UPOS_FEAT.pad_index if UPOS_FEAT is not None else None
         })
         model = cls.MODEL(**args)
         model.load_pretrained(WORD.embed).to(args.device)
