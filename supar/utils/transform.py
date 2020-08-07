@@ -62,7 +62,7 @@ class Transform(object):
         raise AttributeError
 
     def save(self, path, sentences):
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write('\n'.join([str(i) for i in sentences]) + '\n')
 
 
@@ -319,7 +319,7 @@ class CoNLL(Transform):
         """
 
         if isinstance(data, str):
-            with open(data, 'r') as f:
+            with open(data, 'r', encoding='utf-8') as f:
                 lines = [line.strip() for line in f]
         else:
             data = [data] if isinstance(data[0], str) else data
@@ -632,7 +632,7 @@ class Tree(Transform):
             A list of TreeSentence instances.
         """
         if isinstance(data, str):
-            with open(data, 'r') as f:
+            with open(data, 'r', encoding='utf-8') as f:
                 trees = [nltk.Tree.fromstring(string) for string in f]
             self.root = trees[0].label()
         else:
