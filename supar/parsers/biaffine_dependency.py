@@ -265,22 +265,25 @@ class BiaffineDependencyParser(Parser):
             parser.model.load_pretrained(parser.WORD.embed).to(args.device)
             return parser
 
-        logger.info("Build the fields")
+        logger.info("Building the fields")
         form_fields = []  # different ways to represent 'form' tokens, contains a Field or None
         cpos_field = None
 
         WORD = Field('words', pad=pad, unk=unk, bos=bos, lower=True)
         form_fields.append(WORD)
+        logger.info("Using word embeddings")
 
         feat_embedding_sizes = {}
         CHAR_FEAT, BERT_FEAT, UPOS_FEAT = None, None, None
         if args.include_char:
             CHAR_FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos, fix_len=args.fix_len)
-            logger.warning('The size of character embeddings is hardcoded to 50.')
+            logger.info("Using character embeddings")
+            logger.warning("The size of character embeddings is hardcoded to 50.")
             feat_embedding_sizes['char'] = 50
         form_fields.append(CHAR_FEAT)
 
         if args.include_bert:
+            logger.info(f"Using BERT embeddings ({args.bert})")
             from transformers import AutoTokenizer
             tokenizer = AutoTokenizer.from_pretrained(args.bert)
             BERT_FEAT = SubwordField('bert',
@@ -294,7 +297,7 @@ class BiaffineDependencyParser(Parser):
         form_fields.append(BERT_FEAT)
 
         if args.include_upos:
-            logger.info("Using added UPOS tags")
+            logger.info(f"Using UPOS embeddings (size = {args.upos_emb_size})")
             UPOS_FEAT = Field('tags', bos=bos)
             feat_embedding_sizes['upos'] = args.upos_emb_size
         cpos_field = UPOS_FEAT
