@@ -129,7 +129,7 @@ class BiaffineDependencyParser(Parser):
         # words[, char_feats, bert_feats, upos_feats], arcs, rels
         for data in bar:
             words, arcs, rels = data[0], data[-2], data[-1]
-            char_feats, bert_feats, upos_feats = None, None, None  # TODO: validate this
+            char_feats, bert_feats, upos_feats = None, None, None
             n_optional = len(data) - 3  # number of optional features present
             if n_optional > 0:
                 popped_features = 0
@@ -211,6 +211,7 @@ class BiaffineDependencyParser(Parser):
 
         preds = {}
         arcs, rels, probs = [], [], []
+        # TODO: this needs to be fixed for additional features as well
         for words, feats in progress_bar(loader):
             mask = words.ne(self.WORD.pad_index)
             # ignore the first token of each sentence
@@ -271,12 +272,15 @@ class BiaffineDependencyParser(Parser):
         WORD = Field('words', pad=pad, unk=unk, bos=bos, lower=True)
         form_fields.append(WORD)
 
+        feat_embedding_sizes = {}
         CHAR_FEAT, BERT_FEAT, UPOS_FEAT = None, None, None
-        if args.feat == 'char' or args.include_char:
+        if args.include_char:
             CHAR_FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos, fix_len=args.fix_len)
+            logger.warning('The size of character embeddings is hardcoded to 50.')
+            feat_embedding_sizes['char'] = 50
         form_fields.append(CHAR_FEAT)
 
-        if args.feat == 'bert' or args.include_bert:
+        if args.include_bert:
             from transformers import AutoTokenizer
             tokenizer = AutoTokenizer.from_pretrained(args.bert)
             BERT_FEAT = SubwordField('bert',
@@ -286,11 +290,13 @@ class BiaffineDependencyParser(Parser):
                                      fix_len=args.fix_len,
                                      tokenize=tokenizer.tokenize)
             BERT_FEAT.vocab = tokenizer.get_vocab()
+            feat_embedding_sizes['bert'] = 0  # Note: 0 = use the embedding size written in config
         form_fields.append(BERT_FEAT)
 
-        if args.feat == 'tag' or args.include_upos:
+        if args.include_upos:
             logger.info("Using added UPOS tags")
             UPOS_FEAT = Field('tags', bos=bos)
+            feat_embedding_sizes['upos'] = args.upos_emb_size
         cpos_field = UPOS_FEAT
 
         ARC = Field('arcs', bos=bos, use_vocab=False, fn=CoNLL.get_arcs)
@@ -310,11 +316,10 @@ class BiaffineDependencyParser(Parser):
         REL.build(train)
         args.update({
             'n_words': WORD.vocab.n_init,
-            # 'n_feats': len(FEAT.vocab) if FEAT is not None else 0,
             'n_char_feats': len(CHAR_FEAT.vocab) if CHAR_FEAT is not None else 0,
             'n_bert_feats': len(BERT_FEAT.vocab) if BERT_FEAT is not None else 0,
             'n_upos_feats': len(UPOS_FEAT.vocab) if UPOS_FEAT is not None else 0,
-            # TODO: 'feats': {}  # map feature names to embedding sizes
+            'feats': feat_embedding_sizes,  # map feature names to embedding sizes
             'n_rels': len(REL.vocab),
             'pad_index': WORD.pad_index,
             'unk_index': WORD.unk_index,

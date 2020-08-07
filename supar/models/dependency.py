@@ -129,11 +129,11 @@ class BiaffineDependencyModel(nn.Module):
                                             dropout=mix_dropout,
                                             requires_grad=True)
             # Get the actual embedding size after loading BERT
-            self.n_bert_embed = self.feat_embed.n_out
+            self.n_bert_embed = self.bert_embed.n_out
             additional_features_size += self.n_bert_embed
 
-        if 'upostag' in self.args.feats:
-            self.upos_embed = nn.Embedding(num_embeddings=n_feats,
+        if 'upos' in self.args.feats:
+            self.upos_embed = nn.Embedding(num_embeddings=n_upos_feats,
                                            embedding_dim=n_upos_embed)
             additional_features_size += n_upos_embed
 

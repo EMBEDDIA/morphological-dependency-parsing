@@ -23,6 +23,10 @@ def main():
                            help='Include BERT embeddings as features')
     subparser.add_argument('--include_upos', action='store_true',
                            help='Include UPOS embeddings as features')
+    subparser.add_argument('--upos_emb_size', type=int, default=50)
+    subparser.add_argument('--include_ufeats', action='store_true',
+                           help='Include universal feature embeddings as features')
+    subparser.add_argument('--ufeats_emb_size', type=int, default=30)
     subparser.add_argument('--build', '-b', action='store_true',
                            help='whether to build the model first')
     subparser.add_argument('--punct', action='store_true',
