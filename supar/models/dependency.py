@@ -213,18 +213,18 @@ class BiaffineDependencyModel(nn.Module):
 
         additional_features = []
         if char_feats is not None:
-            additional_features.append(self.embed_dropout(self.char_embed(char_feats)))
+            additional_features.append(self.embed_dropout(self.char_embed(char_feats))[0])
         if bert_feats is not None:
-            additional_features.append(self.embed_dropout(self.bert_embed(bert_feats)))
+            additional_features.append(self.embed_dropout(self.bert_embed(bert_feats))[0])
         if upos_feats is not None:
-            additional_features.append(self.embed_dropout(self.upos_embed(upos_feats)))
+            additional_features.append(self.embed_dropout(self.upos_embed(upos_feats))[0])
 
-        word_embed = self.embed_dropout(word_embed)
+        word_embed = self.embed_dropout(word_embed)[0]
         # concatenate the word and feat representations
         if len(additional_features) > 0:
-            embed = torch.cat((*word_embed, *additional_features), dim=-1)
+            embed = torch.cat((word_embed, *additional_features), dim=-1)
         else:
-            embed = torch.cat((*word_embed,), dim=-1)
+            embed = word_embed
 
         x = pack_padded_sequence(embed, mask.sum(1), True, False)
         x, _ = self.lstm(x)
