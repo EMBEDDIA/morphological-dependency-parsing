@@ -172,7 +172,7 @@ class BiaffineDependencyParser(Parser):
 
         for data in loader:
             words, arcs, rels = data[0], data[-2], data[-1]
-            char_feats, bert_feats, upos_feats = None, None, None  # TODO: validate this
+            char_feats, bert_feats, upos_feats = None, None, None
             n_optional = len(data) - 3  # number of optional features present
             if n_optional > 0:
                 popped_features = 0
@@ -211,13 +211,29 @@ class BiaffineDependencyParser(Parser):
 
         preds = {}
         arcs, rels, probs = [], [], []
-        # TODO: this needs to be fixed for additional features as well
-        for words, feats in progress_bar(loader):
+        for data in progress_bar(loader):
+            words = data[0]
+            char_feats, bert_feats, upos_feats = None, None, None
+            n_optional = len(data) - 3  # number of optional features present
+            if n_optional > 0:
+                popped_features = 0
+                if self.CHAR_FEAT is not None:
+                    char_feats = data[1 + popped_features]
+                    popped_features += 1
+
+                if self.BERT_FEAT is not None:
+                    bert_feats = data[1 + popped_features]
+                    popped_features += 1
+
+                if self.UPOS_FEAT is not None:
+                    upos_feats = data[1 + popped_features]
+                    popped_features += 1
+
             mask = words.ne(self.WORD.pad_index)
             # ignore the first token of each sentence
             mask[:, 0] = 0
             lens = mask.sum(1).tolist()
-            s_arc, s_rel = self.model(words, feats)
+            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask,
                                                      self.args.tree,
                                                      self.args.proj)

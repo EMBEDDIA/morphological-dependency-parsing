@@ -49,7 +49,7 @@ def main():
                            help='unk token in pretrained embeddings')
     subparser.add_argument('--n-embed', default=100, type=int,
                            help='dimension of embeddings')
-    subparser.add_argument('--bert', default='bert-base-cased',
+    subparser.add_argument('--bert', default='bert-base-multilingual-uncased',
                            help='which bert model to use')
     subparser.add_argument('--patience', type=int, default=5,
                            help='Early stopping tolerance (optimizing mean of UAS and LAS)')
