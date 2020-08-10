@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 import nltk
 from supar.utils.logging import get_logger, progress_bar
+from supar.utils.universal import FEATS_INDEX
 
 logger = get_logger(__name__)
 
@@ -172,7 +173,7 @@ class CoNLL(Transform):
 
     @property
     def src(self):
-        return self.FORM, self.CPOS
+        return self.FORM, self.CPOS, self.FEATS
 
     @property
     def tgt(self):
@@ -327,6 +328,7 @@ class CoNLL(Transform):
 
         i, start, sentences = 0, 0, []
         for line in progress_bar(lines, leave=False):
+            # Sentences are split with an empty line in conllu format
             if not line:
                 sentences.append(CoNLLSentence(self, lines[start:i]))
                 start = i + 1
@@ -398,9 +400,19 @@ class CoNLLSentence(Sentence):
             if value[0].startswith('#') or not value[0].isdigit():
                 self.annotations[-i-1] = line
             else:
+                # parse FEATS differently (multi-value attribute)
+                feats_annotation = value[FEATS_INDEX]
+                parsed_features = {}
+                if feats_annotation != "_":
+                    # E.g. turn "Mood=Ind|Tense=Past" into {"Mood": "Ind", "Tense": "Past"}
+                    for attr_pair in feats_annotation.split("|"):
+                        attr_name, attr_value = attr_pair.split("=")
+                        parsed_features[attr_name] = attr_value
+                value[FEATS_INDEX] = parsed_features
+
                 self.annotations[len(self.values)] = line
                 self.values.append(value)
-        self.values = list(zip(*self.values))
+        self.values = list(zip(*self.values))  # obtain a list of 10 tuples, representing values column-wise
 
     def __repr__(self):
         # cover the raw lines

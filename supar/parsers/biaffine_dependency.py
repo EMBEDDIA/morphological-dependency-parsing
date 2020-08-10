@@ -13,6 +13,7 @@ from supar.utils.fn import ispunct
 from supar.utils.logging import get_logger, progress_bar
 from supar.utils.metric import AttachmentMetric
 from supar.utils.transform import CoNLL
+from supar.utils.universal import UNIVERSAL_FEATURES
 
 logger = get_logger(__name__)
 
@@ -35,6 +36,8 @@ class BiaffineDependencyParser(Parser):
 
         self.WORD, self.CHAR_FEAT, self.BERT_FEAT = self.transform.FORM  # type: Field
         self.UPOS_FEAT = self.transform.CPOS  # type: Field
+        # contains a `Field` (or `None` if not present) for each universal feature
+        self.UFEATS_FEAT = self.transform.FEATS  # type: list
 
         self.ARC, self.REL = self.transform.HEAD, self.transform.DEPREL
         self.puncts = torch.tensor([i
@@ -126,10 +129,10 @@ class BiaffineDependencyParser(Parser):
 
         bar, metric = progress_bar(loader), AttachmentMetric()
 
-        # words[, char_feats, bert_feats, upos_feats], arcs, rels
+        # words[, char_feats, bert_feats, upos_feats, <...ufeats...>], arcs, rels
         for data in bar:
             words, arcs, rels = data[0], data[-2], data[-1]
-            char_feats, bert_feats, upos_feats = None, None, None
+            char_feats, bert_feats, upos_feats, ufeats = None, None, None, {}
             n_optional = len(data) - 3  # number of optional features present
             if n_optional > 0:
                 popped_features = 0
@@ -145,12 +148,20 @@ class BiaffineDependencyParser(Parser):
                     upos_feats = data[1 + popped_features]
                     popped_features += 1
 
+                for feature_name, curr_field in zip(UNIVERSAL_FEATURES, self.UFEATS_FEAT):
+                    if curr_field is None:
+                        continue
+
+                    ufeats[feature_name] = data[1 + popped_features]
+                    popped_features += 1
+
             self.optimizer.zero_grad()
 
             mask = words.ne(self.WORD.pad_index)
             # ignore the first token of each sentence
             mask[:, 0] = 0
-            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats)
+            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats,
+                                      **ufeats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             loss.backward()
             nn.utils.clip_grad_norm_(self.model.parameters(), self.args.clip)
@@ -172,7 +183,7 @@ class BiaffineDependencyParser(Parser):
 
         for data in loader:
             words, arcs, rels = data[0], data[-2], data[-1]
-            char_feats, bert_feats, upos_feats = None, None, None
+            char_feats, bert_feats, upos_feats, ufeats = None, None, None, {}
             n_optional = len(data) - 3  # number of optional features present
             if n_optional > 0:
                 popped_features = 0
@@ -188,10 +199,18 @@ class BiaffineDependencyParser(Parser):
                     upos_feats = data[1 + popped_features]
                     popped_features += 1
 
+                for feature_name, curr_field in zip(UNIVERSAL_FEATURES, self.UFEATS_FEAT):
+                    if curr_field is None:
+                        continue
+
+                    ufeats[feature_name] = data[1 + popped_features]
+                    popped_features += 1
+
             mask = words.ne(self.WORD.pad_index)
             # ignore the first token of each sentence
             mask[:, 0] = 0
-            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats)
+            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats,
+                                      **ufeats)
             loss = self.model.loss(s_arc, s_rel, arcs, rels, mask)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask,
                                                      self.args.tree,
@@ -213,7 +232,7 @@ class BiaffineDependencyParser(Parser):
         arcs, rels, probs = [], [], []
         for data in progress_bar(loader):
             words = data[0]
-            char_feats, bert_feats, upos_feats = None, None, None
+            char_feats, bert_feats, upos_feats, ufeats = None, None, None, {}
             n_optional = len(data) - 3  # number of optional features present
             if n_optional > 0:
                 popped_features = 0
@@ -227,6 +246,13 @@ class BiaffineDependencyParser(Parser):
 
                 if self.UPOS_FEAT is not None:
                     upos_feats = data[1 + popped_features]
+                    popped_features += 1
+
+                for feature_name, curr_field in zip(UNIVERSAL_FEATURES, self.UFEATS_FEAT):
+                    if curr_field is None:
+                        continue
+
+                    ufeats[feature_name] = data[1 + popped_features]
                     popped_features += 1
 
             mask = words.ne(self.WORD.pad_index)
@@ -282,6 +308,7 @@ class BiaffineDependencyParser(Parser):
             return parser
 
         logger.info("Building the fields")
+        used_features = set()
         form_fields = []  # different ways to represent 'form' tokens, contains a Field or None
         cpos_field = None
 
@@ -289,17 +316,17 @@ class BiaffineDependencyParser(Parser):
         form_fields.append(WORD)
         logger.info("Using word embeddings")
 
-        feat_embedding_sizes = {}
         CHAR_FEAT, BERT_FEAT, UPOS_FEAT = None, None, None
         if args.include_char:
             CHAR_FEAT = SubwordField('chars', pad=pad, unk=unk, bos=bos, fix_len=args.fix_len)
             logger.info("Using character embeddings")
+            used_features.add("char")
             logger.warning("The size of character embeddings is hardcoded to 50.")
-            feat_embedding_sizes['char'] = 50
         form_fields.append(CHAR_FEAT)
 
         if args.include_bert:
             logger.info(f"Using BERT embeddings ({args.bert})")
+            used_features.add("bert")
             from transformers import AutoTokenizer
             tokenizer = AutoTokenizer.from_pretrained(args.bert)
             BERT_FEAT = SubwordField('bert',
@@ -309,19 +336,31 @@ class BiaffineDependencyParser(Parser):
                                      fix_len=args.fix_len,
                                      tokenize=tokenizer.tokenize)
             BERT_FEAT.vocab = tokenizer.get_vocab()
-            feat_embedding_sizes['bert'] = 0  # Note: 0 = use the embedding size written in config
         form_fields.append(BERT_FEAT)
 
         if args.include_upos:
             logger.info(f"Using UPOS embeddings (size = {args.upos_emb_size})")
+            used_features.add("upos")
             UPOS_FEAT = Field('tags', bos=bos)
-            feat_embedding_sizes['upos'] = args.upos_emb_size
         cpos_field = UPOS_FEAT
+
+        ufeats_fields = [None] * len(UNIVERSAL_FEATURES)
+        ufeats_sizes = {}
+        if args.include_ufeats:
+            logger.info(f"Using universal features (size = {args.ufeats_emb_size})")
+            used_features.add("ufeats")
+            for i, feature_name in enumerate(UNIVERSAL_FEATURES):
+                ufeats_sizes[feature_name] = args.ufeats_emb_size
+
+                def _preprocessor(sequence_features):
+                    return [token_features.get(feature_name, unk) for token_features in sequence_features]
+                FEATURE_FIELD = Field(feature_name, bos=bos, unk=unk, pad=pad, fn=_preprocessor)
+                ufeats_fields[i] = FEATURE_FIELD
 
         ARC = Field('arcs', bos=bos, use_vocab=False, fn=CoNLL.get_arcs)
         REL = Field('rels', bos=bos)
 
-        transform = CoNLL(FORM=form_fields, CPOS=cpos_field, HEAD=ARC, DEPREL=REL)
+        transform = CoNLL(FORM=form_fields, CPOS=cpos_field, FEATS=ufeats_fields, HEAD=ARC, DEPREL=REL)
 
         train = Dataset(transform, args.train)
         WORD.build(train, args.min_freq, (Embedding.load(args.embed, args.unk) if args.embed else None))
@@ -331,19 +370,32 @@ class BiaffineDependencyParser(Parser):
             BERT_FEAT.build(train)
         if UPOS_FEAT is not None:
             UPOS_FEAT.build(train)
+        ufeats_vocab_sizes = {}
+        for i, feature_name in enumerate(UNIVERSAL_FEATURES):
+            curr_field = ufeats_fields[i]
+            if curr_field is not None:
+                curr_field.build(train)
+                ufeats_vocab_sizes[feature_name] = len(curr_field.vocab)
 
         REL.build(train)
+        # n_bert_layers=4 currently - TODO: make sure to set this to use all layers (= 0)
         args.update({
             'n_words': WORD.vocab.n_init,
             'n_char_feats': len(CHAR_FEAT.vocab) if CHAR_FEAT is not None else 0,
             'n_bert_feats': len(BERT_FEAT.vocab) if BERT_FEAT is not None else 0,
             'n_upos_feats': len(UPOS_FEAT.vocab) if UPOS_FEAT is not None else 0,
-            'feats': feat_embedding_sizes,  # map feature names to embedding sizes
+            'n_ufeats': ufeats_vocab_sizes,
+            'feats': used_features,
+            'n_embed': args["n-embed"],
+            'n_bert_embed': 0,  # Note: 0 means the pretrained hidden size is used
+            'n_upos_embed': args.upos_emb_size,
+            'n_char_embed': 50,
+            'n_ufeats_embed': ufeats_sizes,  # map universal feature names to embedding sizes
             'n_rels': len(REL.vocab),
+            'bert': args.bert,
             'pad_index': WORD.pad_index,
             'unk_index': WORD.unk_index,
             'bos_index': WORD.bos_index,
-            # 'feat_pad_index': FEAT.pad_index if FEAT is not None else None,
             'char_pad_index': CHAR_FEAT.pad_index if CHAR_FEAT is not None else None,
             'bert_pad_index': BERT_FEAT.pad_index if BERT_FEAT is not None else None,
             'upos_pad_index': UPOS_FEAT.pad_index if UPOS_FEAT is not None else None

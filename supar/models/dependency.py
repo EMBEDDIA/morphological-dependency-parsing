@@ -24,16 +24,15 @@ class BiaffineDependencyModel(nn.Module):
     Args:
         n_words (int):
             Size of the word vocabulary.
-        n_feats (int):
-            Size of the feat vocabulary.
         n_rels (int):
             Number of labels in the treebank.
-        feat (str):
-            Specifies which type of additional feature to use: 'char' | 'bert' | 'tag'.
+        feats (iterable):
+            Specifies which type of additional features to use: 'char' | 'bert' | 'upos' | 'ufeats'.
             'char': Character-level representations extracted by CharLSTM.
-            'bert': BERT representations, other pretrained langugae models like `XLNet` are also feasible.
-            'tag': POS tag embeddings.
-            Default: 'char'.
+            'bert': BERT representations, other pretrained language models like `XLNet` are also feasible.
+            'upos': Universal POS tag embeddings.
+            'ufeats': Universal feature embeddings.
+            Default: None.
         n_embed (int):
             Size of word embeddings. Default: 100.
         n_feat_embed (int):
@@ -72,19 +71,18 @@ class BiaffineDependencyModel(nn.Module):
             The index of the unknown token in the word vocabulary. Default: 1.
     """
     # NOTE: This initialization function is modified, so models other than biaffine might be broken because of this
-    def __init__(self, n_words,  # TODO: n_char_feats, n_bert_feats, n_upos_feats
+    def __init__(self, n_words,
                  n_char_feats,
                  n_bert_feats,
                  n_upos_feats,
+                 n_ufeats,
                  n_rels,
-                 n_feats=-1,
-                 feat='char',  # TODO: `feats` instead of `feat`? and dict[str,int]
                  feats=None,
                  n_embed=100,
-                 n_feat_embed=100,  # TODO: n_upos_embed
-                 n_bert_embed=0,  # Note: 0 means the pretrained hidden size is used
+                 n_bert_embed=0,
                  n_upos_embed=50,
                  n_char_embed=50,
+                 n_ufeats_embed=None,  # dict: feature_name -> embedding_size
                  bert=None,
                  n_bert_layers=4,  # TODO: make sure to set this to use all layers (= 0)
                  mix_dropout=.0,
@@ -95,7 +93,7 @@ class BiaffineDependencyModel(nn.Module):
                  n_mlp_arc=500,
                  n_mlp_rel=100,
                  mlp_dropout=.33,
-                 feat_pad_index=0,  # TODO: char_pad_index, bert_pad_index, upos_pad_index
+                 feat_pad_index=0,
                  char_pad_index=0,
                  bert_pad_index=0,
                  upos_pad_index=0,
@@ -107,7 +105,12 @@ class BiaffineDependencyModel(nn.Module):
         self.args = Config().update(locals())
 
         if self.args.feats is None:
-            self.args.feats = {}
+            self.args.feats = []
+
+        if self.args.n_ufeats_embed is None:
+            self.args.n_ufeats_embed = {}
+
+        assert len(self.args.n_ufeats) == len(self.args.n_ufeats_embed)
 
         # the embedding layer
         self.word_embed = nn.Embedding(num_embeddings=n_words,
@@ -136,6 +139,17 @@ class BiaffineDependencyModel(nn.Module):
             self.upos_embed = nn.Embedding(num_embeddings=n_upos_feats,
                                            embedding_dim=n_upos_embed)
             additional_features_size += n_upos_embed
+
+        self.ufeats_order = []
+        if 'ufeats' in self.args.feats:
+            self.ufeats_embed = nn.ModuleDict()
+            # Fix the order in which universal feature embeddings will be concatenated with other features
+            # (because no amount of documentation will make me trust that dicts are ordered)
+            self.ufeats_order = list(self.args.n_ufeats_embed.keys())
+            for feature_name, emb_size in self.args.n_ufeats_embed.items():
+                self.ufeats_embed[feature_name] = nn.Embedding(num_embeddings=self.args.n_ufeats[feature_name],
+                                                               embedding_dim=self.args.n_ufeats_embed[feature_name])
+                additional_features_size += emb_size
 
         self.embed_dropout = IndependentDropout(p=embed_dropout)
 
@@ -178,7 +192,7 @@ class BiaffineDependencyModel(nn.Module):
             nn.init.zeros_(self.word_embed.weight)
         return self
 
-    def forward(self, words, char_feats=None, bert_feats=None, upos_feats=None):
+    def forward(self, words, char_feats=None, bert_feats=None, upos_feats=None, **ufeats):
         """
         Args:
             words (torch.LongTensor) [batch_size, seq_len]:
@@ -210,6 +224,7 @@ class BiaffineDependencyModel(nn.Module):
         word_embed = self.word_embed(ext_words)
         if hasattr(self, 'pretrained'):
             word_embed += self.pretrained(words)
+        word_embed = self.embed_dropout(word_embed)[0]
 
         additional_features = []
         if char_feats is not None:
@@ -219,7 +234,11 @@ class BiaffineDependencyModel(nn.Module):
         if upos_feats is not None:
             additional_features.append(self.embed_dropout(self.upos_embed(upos_feats))[0])
 
-        word_embed = self.embed_dropout(word_embed)[0]
+        for feature_name in self.ufeats_order:
+            curr_embedder = self.ufeats_embed[feature_name]
+            embedded_data = curr_embedder(ufeats[feature_name])
+            additional_features.append(self.embed_dropout(embedded_data)[0])
+
         # concatenate the word and feat representations
         if len(additional_features) > 0:
             embed = torch.cat((word_embed, *additional_features), dim=-1)
