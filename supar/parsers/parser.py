@@ -12,6 +12,7 @@ from supar.utils.logging import init_logger, logger
 from supar.utils.metric import Metric
 from supar.utils.parallel import DistributedDataParallel as DDP
 from supar.utils.parallel import is_master
+import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ExponentialLR
 
@@ -39,6 +40,7 @@ class Parser(object):
               epochs=5000,
               patience=100,
               verbose=True,
+              bert_lr=2e-5,
               **kwargs):
         args = self.args.update(locals())
         init_logger(logger, verbose=args.verbose)
@@ -60,10 +62,21 @@ class Parser(object):
             self.model = DDP(self.model,
                              device_ids=[dist.get_rank()],
                              find_unused_parameters=True)
-        self.optimizer = Adam(self.model.parameters(),
-                              args.lr,
-                              (args.mu, args.nu),
-                              args.epsilon)
+
+        param_groups = []
+        # BERT fine-tuning requires a much lower learning rate than the other layers
+        for attr_name in dir(self.model):
+            curr = getattr(self.model, attr_name)
+            if isinstance(curr, nn.Module):
+                curr_lr = args.bert_lr if attr_name == "bert_embed" else args.lr
+                curr_params = list(curr.parameters())
+
+                # Skip modules with no learnable parameters and pretrained non-contextual word embeddings
+                if len(curr_params) == 0 or attr_name == "pretrained":
+                    continue
+                param_groups.append({"params": curr_params, "lr": curr_lr})
+
+        self.optimizer = Adam(param_groups, args.lr, (args.mu, args.nu), args.epsilon)
         self.scheduler = ExponentialLR(self.optimizer, args.decay**(1/args.decay_steps))
 
         elapsed = timedelta()
