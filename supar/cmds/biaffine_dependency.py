@@ -47,7 +47,7 @@ def main():
                            help='path to pretrained embeddings')
     subparser.add_argument('--unk', default='unk',
                            help='unk token in pretrained embeddings')
-    subparser.add_argument('--n-embed', default=100, type=int,
+    subparser.add_argument('--n_embed', default=100, type=int,
                            help='dimension of embeddings')
     subparser.add_argument('--bert', default='bert-base-multilingual-uncased',
                            help='which bert model to use')

@@ -383,7 +383,7 @@ class BiaffineDependencyParser(Parser):
             'n_upos_feats': len(UPOS_FEAT.vocab) if UPOS_FEAT is not None else 0,
             'n_ufeats': ufeats_vocab_sizes,
             'feats': used_features,
-            'n_embed': args["n-embed"],
+            'n_embed': args.n_embed,
             'n_bert_embed': 0,  # Note: 0 means the pretrained hidden size is used
             'n_upos_embed': args.upos_emb_size,
             'n_char_embed': 50,
