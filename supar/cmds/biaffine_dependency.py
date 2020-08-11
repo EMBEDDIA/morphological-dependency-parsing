@@ -15,8 +15,6 @@ def main():
     parser.set_defaults(Parser=BiaffineDependencyParser)
     subparsers = parser.add_subparsers(title='Commands', dest='mode')
     subparser = subparsers.add_parser('train', help='Train a parser.')
-    subparser.add_argument('--feat', '-f', default='char', choices=['tag', 'char', 'bert'],
-                           help='choices of additional features')
     subparser.add_argument('--include_char', action='store_true',
                            help='Include character embeddings as features')
     subparser.add_argument('--include_bert', action='store_true',

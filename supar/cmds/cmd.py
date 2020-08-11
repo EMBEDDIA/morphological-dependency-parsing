@@ -10,7 +10,7 @@ def parse(parser):
     parser.add_argument('--conf', '-c', default=None,
                         help='path to config file')
     parser.add_argument('--path', '-p', default=None,
-                        help='path to model file')
+                        help='path to model file (either to save trained model to or load from)')
     parser.add_argument('--device', '-d', default='-1',
                         help='ID of GPU to use')
     parser.add_argument('--seed', '-s', default=1, type=int,
