@@ -17,7 +17,7 @@ def parse(parser):
                         help='seed for generating random numbers')
     parser.add_argument('--threads', '-t', default=16, type=int,
                         help='max num of threads')
-    parser.add_argument('--batch-size', default=5000, type=int,
+    parser.add_argument('--batch_size', default=5000, type=int,
                         help='batch size')
     args, unknown = parser.parse_known_args()
     args, _ = parser.parse_known_args(unknown, args)
