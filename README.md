@@ -8,7 +8,7 @@ The modifications made here are:
 1. **Decoupled features used as additional input**: the original implementation allowed only one of 
 `{character embeddings | UPOS embeddings | BERT embeddings }` to be used at a time in addition to word embeddings.
 2. **Option to use Universal Features embeddings as additional input**: Each feature gets embedded with a D-dimensional 
-vector, in total creating a vector of length `23 * <ufeats_embedding_size>`.  
+vector, in total creating a vector of length `23 * <ufeats_embedding_size>` (`Typo` is not used).  
 3. **Minor component tweaks**: e.g. BERT is tuned together with the parser (previously frozen), BERT parameters are 
 tuned with a smaller (fixed) learning rate, all BERT layers are used instead of just the last four. 
 
@@ -24,18 +24,19 @@ For full list of options please check `supar/cmds/{biaffine_dependency.py, cmd.p
 Many of the parameters are self explanatory, so here are just some specifics:
 1. `--path` is the path where best checkpoint will be saved to or loaded from.  
 2. `--embed` is the path to load the pretrained word embeddings from (if not provided, they will be trained from scratch).  
-3. `--include_char`, `--include_bert`, `--include_upos`, `--include_ufeats` are flags to determine which features are 
-used in addition to word embeddings.  
+3. `--include_char`, `--include_bert`, `--include_upos`, `--include_ufeats`, `--include_lstm` are flags to determine 
+which features are used in addition to word embeddings.  
 The character embeddings are fixed to size 50, BERT embeddings are of size corresponding to the used model's hidden size,
-while POS and universal feature embedding sizes are tunable with `--include_upos` (default: 50) and 
-`--include_ufeats` (default: 30).  
-4. `--bert` determines the used BERT (actually any `transformers` compatible) model for BERT embeddings.
+while POS, universal feature and LSTM embedding sizes are tunable with `--upos_emb_size` (default: 50), 
+`--ufeats_emb_size` (default: 30) and `--lstm_emb_size` (default: 128).
+4. `--bert` determines the used BERT (actually any [transformers](https://github.com/huggingface/transformers) 
+compatible) model for BERT embeddings.
 5. `--patience` is the early stopping tolerance used to stop model training after the mean of UAS and LAS does not 
 improve for specified number of rounds.
 
 ```shell script
 python -m supar.cmds.biaffine_dependency train \
-    --path="en_model_with_bert/model" \
+    --path="en_model_with_bert_upos/model" \
     --tree \
     --device 0 \
     --build  \

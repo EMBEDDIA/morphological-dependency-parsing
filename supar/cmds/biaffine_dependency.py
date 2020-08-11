@@ -19,6 +19,11 @@ def main():
                            help='Include character embeddings as features')
     subparser.add_argument('--include_bert', action='store_true',
                            help='Include BERT embeddings as features')
+    subparser.add_argument('--include_lstm', action='store_true',
+                           help='Include LSTM embeddings as features. Typically used as a less powerful (but maybe '
+                                'faster) replacement for BERT embeddings')
+    subparser.add_argument('--lstm_emb_size', type=int, default=128,
+                           help='Input contextual embedding size')
     subparser.add_argument('--include_upos', action='store_true',
                            help='Include UPOS embeddings as features')
     subparser.add_argument('--upos_emb_size', type=int, default=50)

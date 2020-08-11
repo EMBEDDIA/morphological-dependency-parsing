@@ -23,29 +23,44 @@ class BiaffineDependencyModel(nn.Module):
     Args:
         n_words (int):
             Size of the word vocabulary.
+        n_char_feats (int):
+            Size of the character vocabulary.
+        n_upos_feats (int):
+            Size of the UPOS vocabulary.
+        n_ufeats (dict):
+            Sizes of the universal features vocabularies. Maps a feature name (e.g. Mood) to number of possible values
+            (e.g. 12).
         n_rels (int):
             Number of labels in the treebank.
         feats (iterable):
-            Specifies which type of additional features to use: 'char' | 'bert' | 'upos' | 'ufeats'.
+            Specifies which type of additional features to use: 'char' | 'bert' | 'lstm' | 'upos' | 'ufeats'.
             'char': Character-level representations extracted by CharLSTM.
             'bert': BERT representations, other pretrained language models like `XLNet` are also feasible.
+            'lstm': LSTM representations, obtained by passing the word embeddings through an additional LSTM.
             'upos': Universal POS tag embeddings.
             'ufeats': Universal feature embeddings.
             Default: None.
         n_embed (int):
             Size of word embeddings. Default: 100.
-        n_feat_embed (int):
-            Size of feature representations. Default: 100.
+        n_bert_embed (int):
+            Size of BERT embeddings: if 0, use the hidden size from BERT's config.
+        n_upos_embed (int):
+            Size of the UPOS embeddings.
         n_char_embed (int):
             Size of character embeddings serving as inputs of CharLSTM, required if feat='char'. Default: 50.
+        n_lstm_embed (int):
+            Size of contextual embeddings, that are produced by passing the word embeddings through an additional LSTM.
+            Default: 128.
+        n_ufeats_embed (dict):
+            Sizes of universal feature embeddings. Maps a feature name to its embedding size.
         bert (str):
             Specify which kind of language model to use, e.g., 'bert-base-cased' and 'xlnet-base-cased'.
             This is required if feat='bert'. The full list can be found in `transformers`.
             Default: `None`.
         n_bert_layers (int):
-            Specify how many last layers to use. Required if feat='bert'.
-            The final outputs would be the weight sum of the hidden states of these layers.
-            Default: 4.
+            Specify how many last layers to use: if 0, use all layers.
+            The final outputs would be the learned weighted sum of the hidden states of these layers.
+            Default: 0.
         mix_dropout (float):
             Dropout ratio of BERT layers. Required if feat='bert'. Default: .0.
         embed_dropout (float):
@@ -62,17 +77,19 @@ class BiaffineDependencyModel(nn.Module):
             Label MLP size. Default: 100.
         mlp_dropout (float):
             Dropout ratio of MLP layers. Default: .33.
-        feat_pad_index (int):
-            The index of the padding token in the feat vocabulary. Default: 0.
+        char_pad_index (int):
+            The index of the padding token in the char vocabulary. Default: 0.
+        bert_pad_index (int):
+            The index of the padding token in the BERT vocabulary. Default: 0.
+        upos__pad_index (int):
+            The index of the padding token in the UPOS vocabulary. Default: 0.
         pad_index (int):
             The index of the padding token in the word vocabulary. Default: 0.
         unk_index (int):
             The index of the unknown token in the word vocabulary. Default: 1.
     """
-    # NOTE: This initialization function is modified, so models other than biaffine might be broken because of this
     def __init__(self, n_words,
                  n_char_feats,
-                 n_bert_feats,
                  n_upos_feats,
                  n_ufeats,
                  n_rels,
@@ -81,9 +98,10 @@ class BiaffineDependencyModel(nn.Module):
                  n_bert_embed=0,
                  n_upos_embed=50,
                  n_char_embed=50,
+                 n_lstm_embed=128,
                  n_ufeats_embed=None,  # dict: feature_name -> embedding_size
                  bert=None,
-                 n_bert_layers=4,  # TODO: make sure to set this to use all layers (= 0)
+                 n_bert_layers=0,
                  mix_dropout=.0,
                  embed_dropout=.33,
                  n_lstm_hidden=400,
@@ -92,7 +110,6 @@ class BiaffineDependencyModel(nn.Module):
                  n_mlp_arc=500,
                  n_mlp_rel=100,
                  mlp_dropout=.33,
-                 feat_pad_index=0,
                  char_pad_index=0,
                  bert_pad_index=0,
                  upos_pad_index=0,
@@ -138,6 +155,12 @@ class BiaffineDependencyModel(nn.Module):
             self.upos_embed = nn.Embedding(num_embeddings=n_upos_feats,
                                            embedding_dim=n_upos_embed)
             additional_features_size += n_upos_embed
+
+        if 'lstm' in self.args.feats:
+            self.lstm_embed = nn.LSTM(input_size=n_embed,
+                                      hidden_size=n_lstm_embed,
+                                      batch_first=True)
+            additional_features_size += n_lstm_embed
 
         self.ufeats_order = []
         if 'ufeats' in self.args.feats:
@@ -219,13 +242,16 @@ class BiaffineDependencyModel(nn.Module):
             ext_mask = words.ge(self.word_embed.num_embeddings)
             ext_words = words.masked_fill(ext_mask, self.unk_index)
 
-        # get outputs from embedding layers
+        additional_features = []
+        # get outputs from embedding layers - [batch_size, seq_len, n_embed]
         word_embed = self.word_embed(ext_words)
         if hasattr(self, 'pretrained'):
             word_embed += self.pretrained(words)
+        if hasattr(self, 'lstm_embed'):
+            hidden_features, _ = self.lstm_embed(word_embed)
+            additional_features.append(self.embed_dropout(hidden_features)[0])
         word_embed = self.embed_dropout(word_embed)[0]
 
-        additional_features = []
         if char_feats is not None:
             additional_features.append(self.embed_dropout(self.char_embed(char_feats))[0])
         if bert_feats is not None:

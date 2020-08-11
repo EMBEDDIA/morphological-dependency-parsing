@@ -302,7 +302,7 @@ class BiaffineDependencyParser(Parser):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         # Load pretrained parser if it exists
         if os.path.exists(path) and not args.build:
-            parser = cls.load(**args)  # TODO: make sure the loading is fixed as well
+            parser = cls.load(**args)
             parser.model = cls.MODEL(**parser.args)
             parser.model.load_pretrained(parser.WORD.embed).to(args.device)
             return parser
@@ -337,6 +337,11 @@ class BiaffineDependencyParser(Parser):
                                      tokenize=tokenizer.tokenize)
             BERT_FEAT.vocab = tokenizer.get_vocab()
         form_fields.append(BERT_FEAT)
+
+        # Note: the LSTM will encode context from non-contextual embeddings so no need to build a custom field
+        if args.include_lstm:
+            logger.info(f"Using LSTM contextual embeddings (size = {args.lstm_emb_size})")
+            used_features.add("lstm")
 
         if args.include_upos:
             logger.info(f"Using UPOS embeddings (size = {args.upos_emb_size})")
@@ -379,7 +384,6 @@ class BiaffineDependencyParser(Parser):
         args.update({
             'n_words': WORD.vocab.n_init,
             'n_char_feats': len(CHAR_FEAT.vocab) if CHAR_FEAT is not None else 0,
-            'n_bert_feats': len(BERT_FEAT.vocab) if BERT_FEAT is not None else 0,
             'n_upos_feats': len(UPOS_FEAT.vocab) if UPOS_FEAT is not None else 0,
             'n_ufeats': ufeats_vocab_sizes,
             'feats': used_features,
@@ -387,6 +391,7 @@ class BiaffineDependencyParser(Parser):
             'n_bert_embed': 0,  # Note: 0 means the pretrained hidden size is used
             'n_upos_embed': args.upos_emb_size,
             'n_char_embed': 50,
+            'n_lstm_embed': args.lstm_emb_size,
             'n_ufeats_embed': ufeats_sizes,  # map universal feature names to embedding sizes
             'n_rels': len(REL.vocab),
             'bert': args.bert,
