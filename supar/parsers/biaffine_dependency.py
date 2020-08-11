@@ -8,7 +8,7 @@ from supar.models import BiaffineDependencyModel
 from supar.parsers.parser import Parser
 from supar.utils import Config, Dataset, Embedding
 from supar.utils.common import bos, pad, unk
-from supar.utils.field import Field, SubwordField
+from supar.utils.field import Field, UFeatsField, SubwordField
 from supar.utils.fn import ispunct
 from supar.utils.logging import get_logger, progress_bar
 from supar.utils.metric import AttachmentMetric
@@ -352,9 +352,7 @@ class BiaffineDependencyParser(Parser):
             for i, feature_name in enumerate(UNIVERSAL_FEATURES):
                 ufeats_sizes[feature_name] = args.ufeats_emb_size
 
-                def _preprocessor(sequence_features):
-                    return [token_features.get(feature_name, unk) for token_features in sequence_features]
-                FEATURE_FIELD = Field(feature_name, bos=bos, unk=unk, pad=pad, fn=_preprocessor)
+                FEATURE_FIELD = UFeatsField(feature_name, bos=bos, unk=unk, pad=pad)
                 ufeats_fields[i] = FEATURE_FIELD
 
         ARC = Field('arcs', bos=bos, use_vocab=False, fn=CoNLL.get_arcs)
@@ -378,7 +376,6 @@ class BiaffineDependencyParser(Parser):
                 ufeats_vocab_sizes[feature_name] = len(curr_field.vocab)
 
         REL.build(train)
-        # n_bert_layers=4 currently - TODO: make sure to set this to use all layers (= 0)
         args.update({
             'n_words': WORD.vocab.n_init,
             'n_char_feats': len(CHAR_FEAT.vocab) if CHAR_FEAT is not None else 0,
@@ -393,6 +390,7 @@ class BiaffineDependencyParser(Parser):
             'n_ufeats_embed': ufeats_sizes,  # map universal feature names to embedding sizes
             'n_rels': len(REL.vocab),
             'bert': args.bert,
+            'n_bert_layers': 0,
             'pad_index': WORD.pad_index,
             'unk_index': WORD.unk_index,
             'bos_index': WORD.bos_index,

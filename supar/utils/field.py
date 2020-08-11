@@ -237,6 +237,31 @@ class Field(RawField):
         return pad(sequences, self.pad_index).to(self.device)
 
 
+class UFeatsField(Field):
+    """
+        Practically the same as a Field, but with explicitly determined preprocessing function. Only made as a
+        workaround because `torch.save` has problems with pickling a function.
+    """
+    def preprocess(self, sequence):
+        """
+        Args (list):
+            The sequence to be preprocessed.
+
+        Returns:
+            sequence (list):
+                the preprocessed sequence.
+        """
+
+        # Original sequence contains a dict of {<ufeat_name>: <ufeat_value>} pairs -> extract only a single property
+        sequence = [token_features.get(self.name, self.unk) for token_features in sequence]
+        if self.tokenize is not None:
+            sequence = self.tokenize(sequence)
+        if self.lower:
+            sequence = [str.lower(token) for token in sequence]
+
+        return sequence
+
+
 class SubwordField(Field):
     """
     A field that conducts tokenization and numericalization over each token rather the sequence.
