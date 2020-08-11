@@ -41,7 +41,7 @@ def main():
                            help='path to dev file')
     subparser.add_argument('--test', default='data/ptb/test.conllx',
                            help='path to test file')
-    subparser.add_argument('--embed', default='data/glove.6B.100d.txt',
+    subparser.add_argument('--embed', default=None,
                            help='path to pretrained embeddings')
     subparser.add_argument('--unk', default='unk',
                            help='unk token in pretrained embeddings')
