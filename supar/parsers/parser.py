@@ -57,6 +57,13 @@ class Parser(object):
         test.build(args.batch_size, args.buckets)
         logger.info(f"\n{'train:':6} {train}\n{'dev:':6} {dev}\n{'test:':6} {test}\n")
 
+        total_examples = len(train.sentences) + len(dev.sentences) + len(test.sentences)
+        train_tokens = sum(len(train.sentences[i].values[train.sentences[i].maps["words"]]) for i in range(len(train.sentences)))
+        dev_tokens = sum(len(dev.sentences[i].values[dev.sentences[i].maps["words"]]) for i in range(len(dev.sentences)))
+        test_tokens = sum(len(test.sentences[i].values[test.sentences[i].maps["words"]]) for i in range(len(test.sentences)))
+        logger.info(f"\t- Num. sentences: {total_examples}")
+        logger.info(f"\t- Num. tokens: {train_tokens + dev_tokens + test_tokens}")
+
         logger.info(f"{self.model}\n")
         if dist.is_initialized():
             self.model = DDP(self.model,
