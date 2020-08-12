@@ -56,6 +56,8 @@ def main():
                            help='which bert model to use')
     subparser.add_argument('--patience', type=int, default=5,
                            help='Early stopping tolerance (optimizing mean of UAS and LAS)')
+    subparser.add_argument('--epochs', type=int, default=10,
+                           help='Maximum number of epochs to train the model for')
     # evaluate
     subparser = subparsers.add_parser('evaluate', help='Evaluate the specified parser and dataset.')
     subparser.add_argument('--punct', action='store_true',
