@@ -366,7 +366,7 @@ class BiaffineDependencyParser(Parser):
         transform = CoNLL(FORM=form_fields, CPOS=cpos_field, FEATS=ufeats_fields, HEAD=ARC, DEPREL=REL)
 
         train = Dataset(transform, args.train)
-        WORD.build(train, args.min_freq, (Embedding.load(args.embed, args.unk) if args.embed else None))
+        WORD.build(train, args.min_freq, (Embedding.load(args.embed, args.unk, dim=args.n_embed) if args.embed else None))
         if CHAR_FEAT is not None:
             CHAR_FEAT.build(train)
         if BERT_FEAT is not None:

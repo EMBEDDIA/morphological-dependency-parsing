@@ -29,11 +29,11 @@ class Embedding(object):
             raise AttributeError
 
     @classmethod
-    def load(cls, path, unk=None):
+    def load(cls, path, unk=None, dim=100):
         with open(path, 'r', encoding='utf-8') as f:
             lines = [line for line in f]
         splits = [line.split() for line in lines]
-        tokens, vectors = zip(*[(s[0], list(map(float, s[1:])))
+        tokens, vectors = zip(*[(" ".join(s[: -dim]), list(map(float, s[-dim:])))
                                 for s in splits])
 
         return cls(tokens, vectors, unk=unk)
