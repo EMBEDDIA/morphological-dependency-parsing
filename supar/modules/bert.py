@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+import torch
 import torch.nn as nn
 from supar.modules.scalar_mix import ScalarMix
 from torch.nn.utils.rnn import pad_sequence
@@ -76,6 +76,10 @@ class BertEmbedding(nn.Module):
         batch_size, seq_len, fix_len = subwords.shape
         mask = subwords.ne(self.pad_index)
         lens = mask.sum((1, 2))
+
+        if torch.any(lens >= 512):
+            print("Extremely long sequence found!")
+            print(lens)
 
         # [batch_size, n_subwords]
         subwords = pad_sequence(subwords[mask].split(lens.tolist()), True)
