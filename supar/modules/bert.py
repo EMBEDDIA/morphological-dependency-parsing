@@ -77,10 +77,6 @@ class BertEmbedding(nn.Module):
         mask = subwords.ne(self.pad_index)
         lens = mask.sum((1, 2))
 
-        if torch.any(lens >= 512):
-            print("Extremely long sequence found!")
-            print(lens)
-
         # [batch_size, n_subwords]
         subwords = pad_sequence(subwords[mask].split(lens.tolist()), True)
         bert_mask = pad_sequence(mask[mask].split(lens.tolist()), True)
