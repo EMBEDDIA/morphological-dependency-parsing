@@ -12,9 +12,9 @@ from tqdm import tqdm
 """
 if __name__ == "__main__":
     # Note: make sure this is at least 2 levels deep (e.g. ENG/file.txt) so that the new folder name can be inferred (e.g. ENG-noisy)
-    src_path = "../data/FIN/fi_tdt-ud-train.conllu.txt"
+    src_path = "../data/RUS/ru_gsd-ud-test.conllu.txt"
     # stanza.download("fi", processors="tokenize,pos", package="ftb")
-    nlp = stanza.Pipeline(lang='fi', processors='tokenize,pos', package="ftb", tokenize_pretokenized=True)
+    nlp = stanza.Pipeline(lang='ru', processors='tokenize,pos', package="syntagrus", tokenize_pretokenized=True)
 
     file_parts = src_path.split(os.sep)
     file_dir = os.sep.join(file_parts[:-1])
@@ -33,13 +33,10 @@ if __name__ == "__main__":
     # Copy over dependency labels from golden file
     data_copy = deepcopy(data)
     for idx_sent, gold_sent in tqdm(enumerate(data)):
-        predicted_sent = nlp(" ".join([t["form"] for t in gold_sent])).sentences[0]
-        print(gold_sent)
-        exit(0)
+        predicted_sent = nlp([[t["form"] for t in gold_sent]]).sentences[0]
         
         for idx_token, (gold_tok, predicted_tok_obj) in enumerate(zip(gold_sent, predicted_sent.tokens)):
             predicted_tok = predicted_tok_obj.words[0]
-            print(f"Gold: [{gold_tok['form']}] vs predicted: {predicted_tok.text}")
             assert gold_tok['form'] == predicted_tok.text
             data_copy[idx_sent][idx_token]["upostag"] = predicted_tok.upos
             data_copy[idx_sent][idx_token]["feats"] = predicted_tok.feats
