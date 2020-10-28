@@ -46,6 +46,8 @@ def main():
                            help='path to dev file')
     subparser.add_argument('--test', default='data/ptb/test.conllx',
                            help='path to test file')
+    subparser.add_argument('--prob', action='store_true',
+                           help='Whether to output probabilities when predicting on test set')
     subparser.add_argument('--embed', default=None,
                            help='path to pretrained embeddings')
     subparser.add_argument('--unk', default='unk',

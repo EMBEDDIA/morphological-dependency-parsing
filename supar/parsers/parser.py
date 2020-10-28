@@ -61,6 +61,7 @@ class Parser(object):
         train_tokens = sum(len(train.sentences[i].values[train.sentences[i].maps["words"]]) for i in range(len(train.sentences)))
         dev_tokens = sum(len(dev.sentences[i].values[dev.sentences[i].maps["words"]]) for i in range(len(dev.sentences)))
         test_tokens = sum(len(test.sentences[i].values[test.sentences[i].maps["words"]]) for i in range(len(test.sentences)))
+        logger.info(f"\t- Num. test tokens: {test_tokens}")
         logger.info(f"\t- Num. sentences: {total_examples}")
         logger.info(f"\t- Num. tokens: {train_tokens + dev_tokens + test_tokens}")
 
@@ -115,6 +116,13 @@ class Parser(object):
             if epoch - best_e >= args.patience:
                 break
         loss, metric = self.load(args.path)._evaluate(test.loader)
+
+        test_preds = self._predict(test.loader)
+        for name, value in test_preds.items():
+            setattr(test, name, value)
+        if test_preds is not None:
+            logger.info(f"Save predicted results to {'predictions.txt'}")
+            self.transform.save('predictions.txt', test.sentences)
 
         logger.info(f"Epoch {best_e} saved")
         logger.info(f"{'dev:':6} - {best_metric}")
