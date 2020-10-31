@@ -259,7 +259,8 @@ class BiaffineDependencyParser(Parser):
             # ignore the first token of each sentence
             mask[:, 0] = 0
             lens = mask.sum(1).tolist()
-            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats)
+            s_arc, s_rel = self.model(words, char_feats=char_feats, bert_feats=bert_feats, upos_feats=upos_feats,
+                                      **ufeats)
             arc_preds, rel_preds = self.model.decode(s_arc, s_rel, mask,
                                                      self.args.tree,
                                                      self.args.proj)
