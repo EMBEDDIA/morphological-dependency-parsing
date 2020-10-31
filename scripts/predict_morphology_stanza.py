@@ -38,7 +38,7 @@ if __name__ == "__main__":
         for idx_token, (gold_tok, predicted_tok_obj) in enumerate(zip(gold_sent, predicted_sent.tokens)):
             predicted_tok = predicted_tok_obj.words[0]
             assert gold_tok['form'] == predicted_tok.text
-            data_copy[idx_sent][idx_token]["upostag"] = predicted_tok.upos
+            data_copy[idx_sent][idx_token]["upos"] = predicted_tok.upos
             data_copy[idx_sent][idx_token]["feats"] = predicted_tok.feats
 
             predicted_feats = predicted_tok.feats
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
                 num_correct_ufeats += int(has_same_ufeats and all([gold_ufeats[feat] == pred_ufeats[feat] for feat in common_ufeats]))
 
-            num_correct_upos += int(gold_tok["upostag"] == predicted_tok.upos)
+            num_correct_upos += int(gold_tok["upos"] == predicted_tok.upos)
             total_tokens += 1
 
     print(f"{num_correct_upos}/{total_tokens} correct UPOS tags ({100.0 * num_correct_upos / total_tokens: .2f}%)")
@@ -64,4 +64,5 @@ if __name__ == "__main__":
     
     res = [sent.serialize() for sent in data_copy]
     with open(os.path.join(target_dir, file_name), "w") as f_tgt:
+        print(f"Saving new data to '{os.path.join(target_dir, file_name)}'")
         f_tgt.writelines(res)
