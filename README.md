@@ -1,7 +1,19 @@
-# SuPar
+# morphological-dependency-parsing
+
+Contains code for running the dependency parsing experiments, described in our paper **Enhancing deep neural networks with morphological information**:
+```
+@misc{klemen2020enhancing,
+      title={Enhancing deep neural networks with morphological information}, 
+      author={Matej Klemen and Luka Krsnik and Marko Robnik-Šikonja},
+      year={2020},
+      eprint={2011.12432},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+```
 
 This code contains some modifications of the Biaffine Dependency Parser ([Dozat and Manning, 2017](#dozat-2017-biaffine)) 
-from the parent repository in [SuPar](https://github.com/yzhangcs/parser). The original repository contains additional 
+from [SuPar](https://github.com/yzhangcs/parser). The original repository contains additional 
 models for dependency and constituency parsing as well as a richer documentation.
 
 The modifications made here are: 
@@ -15,7 +27,7 @@ tuned with a smaller (fixed) learning rate, all BERT layers are used instead of 
 ## Installation
 
 ```shell script
-$ git clone https://github.com/matejklemen/parser && cd parser
+$ git clone https://github.com/matejklemen/morphological-dependency-parsing && cd parser
 $ python setup.py install
 ```
 
@@ -23,7 +35,8 @@ $ python setup.py install
 For full list of options please check `supar/cmds/{biaffine_dependency.py, cmd.py}`. 
 Many of the parameters are self explanatory, so here are just some specifics:
 1. `--path` is the path where best checkpoint will be saved to or loaded from.  
-2. `--embed` is the path to load the pretrained word embeddings from (if not provided, they will be trained from scratch).  
+2. `--embed` is the path to load the pretrained word embeddings from (if not provided, they will be trained from scratch).
+In our case, we use word embeddings, extracted from fastText.
 3. `--include_char`, `--include_bert`, `--include_upos`, `--include_ufeats`, `--include_lstm` are flags to determine 
 which features are used in addition to word embeddings.  
 The character embeddings are fixed to size 50, BERT embeddings are of size corresponding to the used model's hidden size,
@@ -35,7 +48,7 @@ compatible) model for BERT embeddings.
 improve for specified number of rounds.
 
 ```shell script
-python -m supar.cmds.biaffine_dependency train \
+$ python3 -m supar.cmds.biaffine_dependency train \
     --path="en_model_with_bert_upos/model" \
     --tree \
     --device 0 \
