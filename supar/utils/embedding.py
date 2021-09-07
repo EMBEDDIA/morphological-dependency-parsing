@@ -11,6 +11,15 @@ class Embedding(object):
         self.pretrained = {w: v for w, v in zip(tokens, vectors)}
         self.unk = unk
 
+        # If UNK is not in the embeddings, add it
+        if self.vectors.shape[0] > 0 and \
+                self.unk is not None and \
+                self.unk not in self.pretrained:
+            randomly_initialized = torch.rand((self.dim,))
+            self.pretrained[self.unk] = randomly_initialized.tolist()
+            self.tokens = self.tokens + (self.unk,)
+            self.vectors = torch.cat((self.vectors, randomly_initialized.unsqueeze(0)), dim=0)
+
     def __len__(self):
         return len(self.tokens)
 
