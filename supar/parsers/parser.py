@@ -103,6 +103,9 @@ class Parser(object):
             loss, test_metric = self._evaluate(test.loader)
             logger.info(f"{'test:':6} - loss: {loss:.4f} - {test_metric}")
 
+            print(f"{'dev:':6} - loss: {loss:.4f} - {dev_metric}")
+            print((f"{'test:':6} - loss: {loss:.4f} - {test_metric}"))
+
             t = datetime.now() - start
             # save the model if it is the best so far
             if curr_mean_as > best_mean_as:
@@ -128,6 +131,11 @@ class Parser(object):
         logger.info(f"{'dev:':6} - {best_metric}")
         logger.info(f"{'test:':6} - {metric}")
         logger.info(f"{elapsed}s elapsed, {elapsed / epoch}s/epoch")
+
+        print(f"Epoch {best_e} saved")
+        print(f"{'dev:':6} - {best_metric}")
+        print(f"{'test:':6} - {metric}")
+        print(f"{elapsed}s elapsed, {elapsed / epoch}s/epoch")
 
     def evaluate(self, data, buckets=8, batch_size=5000, **kwargs):
         args = self.args.update(locals())
